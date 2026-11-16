@@ -1,26 +1,60 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #f7f5f0;
+  --surface: #ffffff;
+  --foreground: #1f2933;
+  --muted: #6b7280;
+  --border: #e5e1d8;
+  --brand: #1e3a5f;
+  --brand-soft: #e8eef5;
+  --accent: #b7791f;
+  --danger: #b42318;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --background: #12161c;
+    --surface: #1b2129;
+    --foreground: #e6e8eb;
+    --muted: #9aa3ad;
+    --border: #2c343e;
+    --brand: #8fb3dc;
+    --brand-soft: #1f2d3d;
+    --accent: #e0a84a;
+    --danger: #f97066;
+  }
 }
 
 @theme inline {
   --color-background: var(--background);
+  --color-surface: var(--surface);
   --color-foreground: var(--foreground);
+  --color-muted: var(--muted);
+  --color-border: var(--border);
+  --color-brand: var(--brand);
+  --color-brand-soft: var(--brand-soft);
+  --color-accent: var(--accent);
+  --color-danger: var(--danger);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+}
+
+/* 16px inputs stop iOS Safari from zooming when Tim taps a field. */
+input,
+select,
+textarea {
+  font-size: 16px;
+}
+@media (min-width: 768px) {
+  input,
+  select,
+  textarea {
+    font-size: 14px;
+  }
 }
