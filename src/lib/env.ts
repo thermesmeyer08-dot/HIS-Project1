@@ -7,7 +7,13 @@ export const env = {
     .map((e) => e.trim().toLowerCase())
     .filter(Boolean),
   siteUrl: process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000",
+  googleClientId: process.env.GOOGLE_CLIENT_ID ?? "",
+  googleClientSecret: process.env.GOOGLE_CLIENT_SECRET ?? "",
+  tokenEncryptionKey: process.env.TOKEN_ENCRYPTION_KEY ?? "",
 };
+
+export const isGoogleConfigured = () => Boolean(env.googleClientId && env.googleClientSecret && env.tokenEncryptionKey);
+export const googleRedirectUri = () => `${env.siteUrl}/api/google/callback`;
 
 export const isSupabaseConfigured = () => Boolean(env.supabaseUrl && env.supabasePublishableKey);
 

@@ -105,3 +105,11 @@ export async function deleteLead(fd: FormData) {
   revalidatePath("/", "layout");
   redirect("/leads");
 }
+
+/** Clear the brief so the next scheduled run writes a fresh one. */
+export async function requestBriefRebuild(fd: FormData) {
+  const { supabase } = await requireUser();
+  const id = str(fd, "id")!;
+  must(await supabase.from("leads").update({ call_prep_brief: null }).eq("id", id));
+  revalidatePath(`/leads/${id}`);
+}

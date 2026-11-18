@@ -7,7 +7,7 @@ A private CRM and (soon) AI lead-generation assistant for one independent life i
 | Phase | What it adds | Status |
 |---|---|---|
 | 1. CRM foundation | Database, dashboard, leads, contacts, businesses, referral partners, approval queue, settings, do-not-contact list, CSV import/export | **Built** |
-| 2. Inbound capture + call prep | Reads website calculator/booking emails, creates leads, drafts "book a call" follow-ups, writes call prep briefs | Next |
+| 2. Inbound capture + call prep | Reads website calculator emails and Calendar bookings, creates leads, drafts "book a call" follow-ups, writes call prep briefs | **Built** |
 | 3. Business-owner prospecting | Finds and scores DFW business owners from public sources | Planned |
 | 4. Referral-partner prospecting | Same pipeline for CPAs, bankers, attorneys, P&C agents, advisors | Planned |
 | 5. Drafting + approval | AI first touches and follow-up sequences, Gmail drafts on approval, printable mailers | Planned |
@@ -44,6 +44,10 @@ src/
   lib/                 Supabase clients, auth guard, data services
   components/          UI
   proxy.ts             session refresh + sign-in gate (Next 16 renamed middleware to "proxy")
+  core/parsers/        calculator email + calendar booking parsers
+  core/google.ts       Gmail / Calendar / OAuth over fetch (no send function, by design)
+  core/ai.ts           Claude calls (call prep with web search, follow-up drafts), cost tracking
+jobs/                  scheduled jobs run by GitHub Actions (inbound.ts)
 supabase/migrations/   SQL schema
 scripts/seed.ts        fake test data
 tests/                 Vitest unit tests
@@ -93,7 +97,7 @@ Useful scripts:
 
 1. Sign up at [supabase.com](https://supabase.com) (free plan) and click **New project**. Pick a region near Texas (for example *East US* or *Central US*), set a strong database password and save it in a password manager.
 2. **Create the tables.** Use one of these:
-   - *Easiest:* open **SQL Editor → New query**, paste the whole contents of `supabase/migrations/20261116000000_crm_foundation.sql`, and click **Run**. Then do the same with `supabase/migrations/20261117000000_grants.sql`. Newer Supabase projects don't give the app access to new tables until this second file is run. If Supabase warns that a query "creates tables without enabling Row Level Security", either choice is fine: the first file enables it at the end.
+   - *Easiest:* open **SQL Editor → New query**, paste the whole contents of `supabase/migrations/20261116000000_crm_foundation.sql`, and click **Run**. Then do the same, in order, with `supabase/migrations/20261117000000_grants.sql` and `supabase/migrations/20261118000000_inbound.sql`. Newer Supabase projects don't give the app access to new tables until the grants file is run. If Supabase warns that a query "creates tables without enabling Row Level Security", either choice is fine: the first file enables it at the end.
    - *CLI:* `npx supabase login`, then `npm run db:link` (choose the project), then `npm run db:push`.
 3. **Keys.** Go to **Project Settings → API Keys** and copy these into `.env.local`:
    - Project URL → `NEXT_PUBLIC_SUPABASE_URL`
@@ -117,18 +121,46 @@ Useful scripts:
 
 1. Sign up at [netlify.com](https://netlify.com) with GitHub. Choose **Add new site → Import an existing project → GitHub** and pick `HIS-Project1`.
 2. Netlify detects Next.js automatically (build command `npm run build`). Leave the defaults.
-3. Under **Site configuration → Environment variables**, add `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, `ALLOWED_EMAILS` and `NEXT_PUBLIC_SITE_URL` (your `https://….netlify.app` address). Do **not** add `SUPABASE_SECRET_KEY` to Netlify. The web app doesn't need it.
-4. Deploy, then add the Netlify URL to Supabase's Site URL and Redirect URLs (Supabase setup, step 6).
+3. Under **Site configuration → Environment variables**, add `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, `ALLOWED_EMAILS`, `NEXT_PUBLIC_SITE_URL` (your `https://….netlify.app` address), `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` and `TOKEN_ENCRYPTION_KEY`. Do **not** add `SUPABASE_SECRET_KEY` or `ANTHROPIC_API_KEY` to Netlify. The web app doesn't need them.
+4. Deploy, then add the Netlify URL to Supabase's Site URL and Redirect URLs (Supabase setup, step 6) and to the Google OAuth client's redirect URIs (Google OAuth setup, step 5).
 5. On your phone, open the site and use **Share → Add to Home Screen** so it works like an app.
 
 ## GitHub Actions
 
 - `.github/workflows/ci.yml` runs lint, typecheck, tests and a build on every push and pull request.
-- Scheduled agent jobs (Gmail inbound, prospecting, drafting, digest) arrive in later phases as cron workflows. Their secrets go in **GitHub → Settings → Secrets and variables → Actions**.
+- `.github/workflows/inbound.yml` runs the **inbound job** hourly from about 7am to 9pm Dallas time, and on demand from **Actions → Inbound → Run workflow**. Each run:
+  1. reads new website calculator emails (Gmail search set in **Settings → Inbound capture**) and creates or updates the contact and lead
+  2. reads booked appointments from Google Calendar (events whose title contains "coverage review" and whose description has a "Booked by" block). It moves the lead to **Meeting booked** and notices cancellations and reschedules.
+  3. drafts a "book a call" follow-up email in the **approval queue** for calculator leads who ticked the consent box and haven't booked after `followup_delay_hours`
+  4. writes a **call prep brief** on each lead with a meeting in the next few days. With `ANTHROPIC_API_KEY` set, this uses Claude with web research; without it, a template is used.
 
-## Google OAuth setup
+  AI spend is logged in `job_runs` (shown under **Settings → Recent automatic runs**) and stops at the daily cap.
 
-Needed from Phase 2. Step-by-step instructions will be added here then. Summary: a Google Cloud project with an **Internal** OAuth consent screen (Google Workspace, so no verification is needed and tokens don't expire weekly), with scopes `gmail.readonly`, `gmail.compose` (drafts only; the code has no send function) and `calendar.readonly`.
+  **Secrets.** In GitHub, go to **Settings → Secrets and variables → Actions → New repository secret** and add `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SECRET_KEY`, `ALLOWED_EMAILS`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `TOKEN_ENCRYPTION_KEY` and, when you have it, `ANTHROPIC_API_KEY`.
+- **Run it locally:** `npm run job:inbound`. Test without Google by feeding a saved email body or booking description: `npm run job:inbound -- --calculator-file sample.txt --no-delay`, or `--booking-file sample.txt`.
+- How the job signs in: it uses the secret key to create a one-time sign-in token for Tim and swaps it for a normal session. Every query therefore goes through the same row-level security as the app. No email is sent, and only the job's own session is signed out at the end.
+
+## Google OAuth setup (about 15 minutes)
+
+The CRM asks Google for exactly three permissions: read Gmail (to find website notifications), create Gmail drafts (Phase 5; **the code has no send function**), and read Calendar.
+
+1. Go to [console.cloud.google.com](https://console.cloud.google.com) **signed in as Tim's business Google Workspace account**. Create a project named `HIS CRM`.
+2. **APIs & Services → Library:** search for and **Enable** the **Gmail API** and the **Google Calendar API**.
+3. **Google Auth Platform → Get started** (sometimes labelled "OAuth consent screen"):
+   - App name: `HIS CRM`. Support email: Tim's email.
+   - **Audience: Internal.** Because this is a Workspace account, Internal means only your domain can use the app, no Google verification is needed, and access doesn't expire weekly.
+   - Contact email: Tim's email. Agree and **Create**.
+4. **Data Access → Add or remove scopes:** add `.../auth/gmail.readonly`, `.../auth/gmail.compose` and `.../auth/calendar.readonly`. Save.
+5. **Clients → Create client:**
+   - Application type: **Web application**. Name: `HIS CRM web`.
+   - **Authorized redirect URIs:** add `http://localhost:3000/api/google/callback`, and later `https://YOUR-SITE.netlify.app/api/google/callback`.
+   - Create, then copy the **Client ID** and **Client secret** into `.env.local` as `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`.
+6. Create an encryption key for the stored Google login and add it to `.env.local` as `TOKEN_ENCRYPTION_KEY`. Generate one with:
+   ```bash
+   openssl rand -base64 48
+   ```
+   Keep a copy in your password manager. If it's lost, you just reconnect Google.
+7. Restart `npm run dev`, open **Settings → Google → Connect Google**, choose Tim's business account, and allow access. Settings should show **Connected**.
 
 ## Environment variables
 
@@ -139,9 +171,9 @@ Needed from Phase 2. Step-by-step instructions will be added here then. Summary:
 | `SUPABASE_SECRET_KEY` | `.env.local`, GitHub secrets | 1 (seed), 2+ (jobs) | Bypasses RLS. Never expose it. |
 | `ALLOWED_EMAILS` | `.env.local`, Netlify | 1 | Comma-separated sign-in allow-list |
 | `NEXT_PUBLIC_SITE_URL` | `.env.local`, Netlify | 1 | Base URL for sign-in links |
-| `ANTHROPIC_API_KEY` | GitHub secrets | 2 | Claude API |
-| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | Netlify, GitHub secrets | 2 | Google OAuth |
-| `TOKEN_ENCRYPTION_KEY` | Netlify, GitHub secrets | 2 | Encrypts the stored Google refresh token |
+| `ANTHROPIC_API_KEY` | `.env.local` (to test jobs locally), GitHub secrets | 2 | Claude API. Optional: without it, briefs and follow-ups use templates. |
+| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | `.env.local`, Netlify, GitHub secrets | 2 | Google OAuth client (web application) |
+| `TOKEN_ENCRYPTION_KEY` | `.env.local`, Netlify, GitHub secrets | 2 | 32+ characters; encrypts the stored Google refresh token. Must be the same everywhere. |
 
 ## Database overview
 

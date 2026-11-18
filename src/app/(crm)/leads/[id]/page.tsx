@@ -1,10 +1,11 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { CHANNEL_LABELS, CHANNELS, LEAD_STAGES, PRODUCT_LABELS, PRODUCTS, STAGE_LABELS } from "@/core/constants";
-import type { Activity, Contact, Lead, Organization } from "@/core/types";
+import type { Activity, Contact, InboundEvent, Lead, Organization } from "@/core/types";
 import { requireUser } from "@/lib/auth";
 import { fullName } from "@/lib/format";
-import { changeStage, deleteLead, updateLead } from "@/app/actions/leads";
+import { changeStage, deleteLead, requestBriefRebuild, updateLead } from "@/app/actions/leads";
+import { InboundCard } from "@/components/inbound-card";
 import { createDraft } from "@/app/actions/drafts";
 import { DraftCard, type DraftWithRefs } from "@/components/draft-card";
 import { ActionForm, AutoSubmitSelect, ConfirmButton, SubmitButton } from "@/components/forms";
@@ -18,7 +19,7 @@ export default async function LeadPage({ params }: PageProps<"/leads/[id]">) {
   if (!lead) notFound();
   const l = lead as Lead;
 
-  const [contactRes, orgRes, actRes, draftRes] = await Promise.all([
+  const [contactRes, orgRes, actRes, draftRes, inboundRes] = await Promise.all([
     supabase.from("contacts").select("*").eq("id", l.contact_id).single(),
     l.org_id ? supabase.from("organizations").select("*").eq("id", l.org_id).single() : Promise.resolve({ data: null }),
     supabase.from("activities").select("*").eq("lead_id", id).order("occurred_at", { ascending: false }).limit(100),
@@ -27,6 +28,7 @@ export default async function LeadPage({ params }: PageProps<"/leads/[id]">) {
       .select("*, contacts(id, first_name, last_name, email, linkedin_url, organizations(name))")
       .eq("lead_id", id)
       .order("created_at", { ascending: false }),
+    supabase.from("inbound_events").select("*").eq("lead_id", id).order("created_at", { ascending: false }),
   ]);
   const c = contactRes.data as Contact;
   const org = orgRes.data as Organization | null;
@@ -62,10 +64,19 @@ export default async function LeadPage({ params }: PageProps<"/leads/[id]">) {
       <div className="grid gap-4 lg:grid-cols-3">
         <div className="space-y-4 lg:col-span-2">
           {l.call_prep_brief && (
-            <Card title="Call prep brief">
+            <Card
+              title="Call prep brief"
+              actions={
+                <form action={requestBriefRebuild}>
+                  <input type="hidden" name="id" value={l.id} />
+                  <button className="text-xs text-brand underline">Rebuild on next run</button>
+                </form>
+              }
+            >
               <div className="whitespace-pre-wrap text-sm">{l.call_prep_brief}</div>
             </Card>
           )}
+          <InboundCard events={(inboundRes.data ?? []) as InboundEvent[]} />
 
           <Card title="Lead details">
             <ActionForm action={updateLead} className="space-y-3">
@@ -145,6 +156,13 @@ export default async function LeadPage({ params }: PageProps<"/leads/[id]">) {
                   <dt className="sr-only">Email</dt>
                   <dd className="break-all">{c.email}</dd>
                 </div>
+              )}
+              {c.phone && (
+                <dd>
+                  <a href={`tel:${c.phone.replace(/[^0-9+]/g, "")}`} className="text-brand underline">
+                    {c.phone}
+                  </a>
+                </dd>
               )}
               {c.linkedin_url && (
                 <dd>

@@ -136,3 +136,46 @@ export async function signOut() {
   await supabase.auth.signOut();
   revalidatePath("/", "layout");
 }
+
+export async function disconnectGoogle() {
+  const { supabase } = await requireUser();
+  const { data } = await supabase.from("oauth_tokens").select("encrypted_refresh_token").eq("provider", "google").maybeSingle();
+  if (data?.encrypted_refresh_token && process.env.TOKEN_ENCRYPTION_KEY) {
+    try {
+      const { decryptSecret } = await import("@/core/crypto");
+      const token = decryptSecret(data.encrypted_refresh_token, process.env.TOKEN_ENCRYPTION_KEY);
+      await fetch(`https://oauth2.googleapis.com/revoke?token=${encodeURIComponent(token)}`, { method: "POST" });
+    } catch {
+      // Revocation is best-effort; we still delete our copy.
+    }
+  }
+  must(await supabase.from("oauth_tokens").delete().eq("provider", "google"));
+  revalidatePath("/settings");
+}
+
+export async function saveInboundSettings(_: ActionState, fd: FormData): Promise<ActionState> {
+  try {
+    const { supabase } = await requireUser();
+    const current = await getSettings(supabase);
+    const int = (k: string, lo: number, hi: number, fallback: number) => {
+      const n = Math.round(Number(str(fd, k)));
+      return Number.isFinite(n) && str(fd, k) !== null ? Math.max(lo, Math.min(hi, n)) : fallback;
+    };
+    must(
+      await supabase
+        .from("settings")
+        .update({
+          inbound_gmail_query: str(fd, "inbound_gmail_query") ?? current.inbound_gmail_query,
+          booking_title_match: str(fd, "booking_title_match") ?? current.booking_title_match,
+          followup_delay_hours: int("followup_delay_hours", 0, 720, current.followup_delay_hours),
+          inbound_lookback_days: int("inbound_lookback_days", 1, 365, current.inbound_lookback_days),
+          brief_days_ahead: int("brief_days_ahead", 0, 30, current.brief_days_ahead),
+        })
+        .eq("id", current.id),
+    );
+    revalidatePath("/settings");
+    return { ok: "Inbound settings saved." };
+  } catch (e) {
+    return fail(e);
+  }
+}

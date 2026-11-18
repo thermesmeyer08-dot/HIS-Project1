@@ -43,6 +43,9 @@ export function ContactFields({
       <Field label="Where the email came from" hint="e.g. company website contact page">
         <Input name="email_source" defaultValue={c?.email_source ?? ""} />
       </Field>
+      <Field label="Phone">
+        <Input name="phone" type="tel" defaultValue={c?.phone ?? ""} autoComplete="off" />
+      </Field>
       <Field label="LinkedIn URL" hint="Entered by hand. We never scrape LinkedIn.">
         <Input name="linkedin_url" defaultValue={c?.linkedin_url ?? ""} placeholder="https://www.linkedin.com/in/…" />
       </Field>

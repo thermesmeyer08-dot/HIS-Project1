@@ -43,6 +43,7 @@ export interface Contact {
   email: string | null;
   email_source: string | null;
   linkedin_url: string | null;
+  phone: string | null;
   city: string | null;
   state: string | null;
   contact_type: ContactType;
@@ -149,6 +150,38 @@ export interface Settings {
   target_industries: string[];
   followup_days: number[];
   style_example_count: number;
+  inbound_gmail_query: string;
+  booking_title_match: string;
+  followup_delay_hours: number;
+  inbound_lookback_days: number;
+  brief_days_ahead: number;
+}
+
+export interface InboundEvent {
+  id: string;
+  kind: "calculator" | "booking";
+  gmail_message_id: string | null;
+  calendar_event_id: string | null;
+  raw_excerpt: string | null;
+  parsed: Record<string, unknown> | null;
+  contact_id: string | null;
+  lead_id: string | null;
+  processed_at: string | null;
+  created_at: string;
+}
+
+export interface JobRun {
+  id: string;
+  job: string;
+  status: string;
+  items_processed: number;
+  input_tokens: number;
+  output_tokens: number;
+  web_searches: number;
+  est_cost_usd: number;
+  error: string | null;
+  started_at: string;
+  finished_at: string | null;
 }
 
 export type ContactWithOrg = Contact & { organizations: Pick<Organization, "id" | "name" | "website"> | null };
