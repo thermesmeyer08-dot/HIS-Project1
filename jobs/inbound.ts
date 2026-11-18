@@ -497,6 +497,13 @@ async function main() {
   const calcFile = arg("--calculator-file");
   const bookingFile = arg("--booking-file");
   const localTest = Boolean(calcFile || bookingFile);
+
+  // On GitHub, skip quietly (instead of failing every hour) until the secrets are added.
+  const needed = ["NEXT_PUBLIC_SUPABASE_URL", "SUPABASE_SECRET_KEY", "GOOGLE_CLIENT_ID", "TOKEN_ENCRYPTION_KEY"];
+  if (process.env.CI && needed.some((n) => !process.env[n])) {
+    log(`Not configured yet: add these GitHub Actions secrets: ${needed.filter((n) => !process.env[n]).join(", ")}. Skipping.`);
+    return;
+  }
   const env = localTest ? null : requireEnv("GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET", "TOKEN_ENCRYPTION_KEY");
   const session = await signInAsOwner();
   const { db } = session;
