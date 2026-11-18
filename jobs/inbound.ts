@@ -279,6 +279,16 @@ async function handleNewBooking(ctx: Ctx, ev: CalendarEvent) {
     ) as { id: string; stage: LeadStage; org_id: string | null };
   }
   if (PRE_MEETING.includes(lead.stage)) await setLeadStage(db, lead.id, "meeting_booked", "Booked a coverage review");
+  // A "please book a call" draft is moot once they've booked: pull it from the queue.
+  const withdrawn = must(
+    await db
+      .from("drafts")
+      .update({ status: "rejected", rejection_reason: "Auto-withdrawn: they booked a call" })
+      .eq("lead_id", lead.id)
+      .in("status", ["pending_approval", "approved"])
+      .select("id"),
+  ) as { id: string }[];
+  if (withdrawn.length) log(`Withdrew ${withdrawn.length} unsent follow-up draft(s) for lead ${lead.id}`);
   must(
     await db
       .from("leads")
