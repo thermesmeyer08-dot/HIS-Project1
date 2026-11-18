@@ -93,7 +93,7 @@ Useful scripts:
 
 1. Sign up at [supabase.com](https://supabase.com) (free plan) and click **New project**. Pick a region near Texas (for example *East US* or *Central US*), set a strong database password and save it in a password manager.
 2. **Create the tables.** Use one of these:
-   - *Easiest:* open **SQL Editor → New query**, paste the whole contents of `supabase/migrations/20261116000000_crm_foundation.sql`, and click **Run**.
+   - *Easiest:* open **SQL Editor → New query**, paste the whole contents of `supabase/migrations/20261116000000_crm_foundation.sql`, and click **Run**. Then do the same with `supabase/migrations/20261117000000_grants.sql`. Newer Supabase projects don't give the app access to new tables until this second file is run. If Supabase warns that a query "creates tables without enabling Row Level Security", either choice is fine: the first file enables it at the end.
    - *CLI:* `npx supabase login`, then `npm run db:link` (choose the project), then `npm run db:push`.
 3. **Keys.** Go to **Project Settings → API Keys** and copy these into `.env.local`:
    - Project URL → `NEXT_PUBLIC_SUPABASE_URL`
@@ -103,9 +103,12 @@ Useful scripts:
 5. **Block other sign-ups.** Under **Authentication → Sign In / Providers**, turn **off** "Allow new users to sign up". (The app also refuses any email not in `ALLOWED_EMAILS`.)
 6. **Redirect URLs.** Under **Authentication → URL Configuration**:
    - Site URL: `http://localhost:3000` for now, and your Netlify URL once deployed.
-   - Redirect URLs: add `http://localhost:3000/auth/callback` and `https://YOUR-SITE.netlify.app/auth/callback`.
-7. Restart `npm run dev`, go to http://localhost:3000, enter Tim's email and click the link in the email.
-8. Optional: `npm run seed` loads a handful of obviously fake records so you can click around. Re-running it replaces them.
+   - Redirect URLs: add `http://localhost:3000/auth/confirm` and `https://YOUR-SITE.netlify.app/auth/confirm`.
+7. **Sign-in email template** (recommended, so links work when tapped inside the Gmail app on a phone). Under **Authentication → Emails → Magic Link**, replace `{{ .ConfirmationURL }}` in the link with:
+   `{{ .RedirectTo }}?token_hash={{ .TokenHash }}&type=email`
+   and save. (The app also works with the default template, but then the link must be opened in the same browser that requested it.)
+8. Restart `npm run dev`, go to http://localhost:3000, enter Tim's email and click the link in the email.
+9. Optional: `npm run seed` loads a handful of obviously fake records so you can click around. Re-running it replaces them.
 
 > Supabase's built-in email sender is rate-limited (a few emails per hour). That's plenty for one user. Sign-in links expire after one hour.
 > Free Supabase projects pause after 7 days with no activity. From Phase 2 the daily jobs keep it awake. Until then, open the app at least once a week, or un-pause it from the dashboard.

@@ -64,7 +64,7 @@ export default async function LeadsPage({ searchParams }: PageProps<"/leads">) {
           </>
         }
       />
-      <form className="mb-4 grid grid-cols-2 gap-2 md:grid-cols-7">
+      <form className="mb-4 grid grid-cols-2 gap-2 md:grid-cols-4 xl:grid-cols-7">
         <input name="q" defaultValue={f.q} placeholder="Search name, business, city…" className="col-span-2 rounded-lg border border-border bg-surface px-3 py-2" />
         <Sel name="stage" value={f.stage} placeholder="Any stage" options={LEAD_STAGES.map((s) => [s, STAGE_LABELS[s as LeadStage]])} />
         <Sel name="product" value={f.product} placeholder="Any product" options={PRODUCTS.map((p) => [p, PRODUCT_LABELS[p as Product]])} />

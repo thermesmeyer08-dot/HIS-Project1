@@ -9,6 +9,7 @@ import { config } from "dotenv";
 import { createClient } from "@supabase/supabase-js";
 import { normalizeOrgName, normalizePersonName } from "../src/core/normalize";
 import { withEmailFooter } from "../src/core/compliance";
+import { addDays, todayCentral } from "../src/lib/format";
 
 config({ path: ".env.local" });
 
@@ -28,7 +29,7 @@ async function must<T>(p: PromiseLike<{ data: T; error: { message: string } | nu
 }
 
 const SEED = "seed";
-const daysFromNow = (n: number) => new Date(Date.now() + n * 864e5).toISOString().slice(0, 10);
+const daysFromNow = (n: number) => addDays(todayCentral(), n); // Dallas dates
 
 async function main() {
   const { data: users, error } = await db.auth.admin.listUsers({ perPage: 1000 });
@@ -55,7 +56,10 @@ async function main() {
   const orgRows = await must(
     db
       .from("organizations")
-      .insert(orgs.map((o) => ({ state: "TX", ...o, owner_id, source: SEED, name_normalized: normalizeOrgName(o.name), domain: o.website })))
+      .insert(
+        orgs.map((o) => ({ state: "TX", ...o, owner_id, source: SEED, name_normalized: normalizeOrgName(o.name), domain: o.website })),
+        { defaultToNull: false },
+      )
       .select("id, name"),
   );
   const org = (name: string) => orgRows.find((o) => o.name === name)!.id;
@@ -97,9 +101,9 @@ async function main() {
 
   await must(
     db.from("referral_partners").insert([
-      { owner_id, contact_id: contact("Chris").id, profession: "cpa", relationship_stage: "met", referrals_received: 1 },
+      { owner_id, contact_id: contact("Chris").id, profession: "cpa", relationship_stage: "met", referrals_received: 1, last_touch_at: new Date(Date.now() - 20 * 864e5).toISOString() },
       { owner_id, contact_id: contact("Pat").id, profession: "banker", relationship_stage: "identified" },
-    ]),
+    ], { defaultToNull: false }),
   );
 
   const leads = await must(
@@ -122,7 +126,7 @@ async function main() {
         },
         { owner_id, contact_id: contact("Sam").id, stage: "placed", score: 90, product_interest: ["personal"] },
         { owner_id, contact_id: contact("Olive").id, org_id: contact("Olive").org_id, stage: "new", score: 40 },
-      ])
+      ], { defaultToNull: false })
       .select("id, contact_id"),
   );
   const leadFor = (first: string) => leads.find((l) => l.contact_id === contact(first).id)!.id;
@@ -147,7 +151,7 @@ async function main() {
         body: withEmailFooter("Hi Chris,\n\nThanks again for the referral last month. If it's helpful, I put together a one-page checklist on funding buy-sell agreements that your clients can use before year-end planning.", settings),
         model: "seed",
       },
-    ]),
+    ], { defaultToNull: false }),
   );
 
   await must(
@@ -156,7 +160,7 @@ async function main() {
       { owner_id, contact_id: contact("Raj").id, lead_id: leadFor("Raj"), type: "inbound", body: "Calculator submission (seed example)" },
       { owner_id, contact_id: contact("Raj").id, lead_id: leadFor("Raj"), type: "meeting", body: "Booked discovery call (seed example)" },
       { owner_id, contact_id: contact("Chris").id, type: "meeting", body: "Coffee at Klyde Warren (seed example)", occurred_at: new Date(Date.now() - 20 * 864e5).toISOString() },
-    ]),
+    ], { defaultToNull: false }),
   );
 
   await must(db.from("do_not_contact").insert({ owner_id, kind: "domain", value_normalized: "optout.example", reason: "seed example" }));

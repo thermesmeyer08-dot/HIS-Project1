@@ -85,7 +85,8 @@ export async function saveDraftEdits(_: ActionState, fd: FormData): Promise<Acti
   }
 }
 
-export async function approveDraft(_: ActionState, fd: FormData): Promise<ActionState> {
+export async function approveDraft(state: ActionState, fd: FormData): Promise<ActionState> {
+  if (fd.get("intent") === "save") return saveDraftEdits(state, fd);
   try {
     const { supabase } = await requireUser();
     const id = str(fd, "id")!;

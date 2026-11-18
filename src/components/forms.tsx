@@ -1,11 +1,14 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useActionState, useEffect, useRef, useState, type ReactNode } from "react";
+import { createContext, startTransition, useActionState, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { useFormStatus } from "react-dom";
 import { btn, cx } from "./ui";
 
 type State = { error?: string; ok?: string } | undefined;
+
+/** Pending flag for ActionForm submits (useFormStatus can't see manual transitions). */
+const PendingContext = createContext<boolean | null>(null);
 
 /**
  * Wraps a server action that returns { error?, ok? } and shows the message.
@@ -22,14 +25,25 @@ export function ActionForm({
   className?: string;
   resetOnSuccess?: boolean;
 }) {
-  const [state, formAction] = useActionState(action, undefined);
+  const [state, formAction, isPending] = useActionState(action, undefined);
   const ref = useRef<HTMLFormElement>(null);
   useEffect(() => {
     if (resetOnSuccess && state?.ok && !state.error) ref.current?.reset();
   }, [state, resetOnSuccess]);
   return (
-    <form ref={ref} action={formAction} className={className}>
-      {children}
+    <form
+      ref={ref}
+      className={className}
+      // Submit manually so React doesn't clear the fields when the action
+      // returns an error. The clicked button's name/value is included.
+      onSubmit={(e) => {
+        e.preventDefault();
+        const submitter = (e.nativeEvent as SubmitEvent).submitter as HTMLElement | null;
+        const fd = new FormData(e.currentTarget, submitter);
+        startTransition(() => formAction(fd));
+      }}
+    >
+      <PendingContext.Provider value={isPending}>{children}</PendingContext.Provider>
       {state?.error && (
         <p role="alert" className="mt-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-800 dark:bg-red-950 dark:text-red-200">
           {state.error}
@@ -67,7 +81,9 @@ export function SubmitButton({
   className?: string;
   formAction?: (fd: FormData) => void | Promise<void>;
 }) {
-  const { pending } = useFormStatus();
+  const { pending: formPending } = useFormStatus();
+  const ctxPending = useContext(PendingContext);
+  const pending = ctxPending ?? formPending;
   return (
     <button type="submit" name={name} value={value} formAction={formAction} disabled={pending} className={cx(btn[variant], className)}>
       {pending ? "Working…" : children}

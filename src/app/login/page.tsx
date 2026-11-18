@@ -11,7 +11,7 @@ async function sendLink(fd: FormData) {
     const supabase = await createClient();
     await supabase.auth.signInWithOtp({
       email,
-      options: { emailRedirectTo: `${env.siteUrl}/auth/callback`, shouldCreateUser: false },
+      options: { emailRedirectTo: `${env.siteUrl}/auth/confirm`, shouldCreateUser: false },
     });
   }
   redirect("/login?sent=1");

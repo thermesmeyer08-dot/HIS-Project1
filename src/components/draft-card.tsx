@@ -2,7 +2,7 @@ import Link from "next/link";
 import { CHANNEL_LABELS } from "@/core/constants";
 import { complianceWarnings } from "@/core/compliance";
 import type { Draft } from "@/core/types";
-import { approveDraft, deleteDraft, markSent, rejectDraft, saveDraftEdits } from "@/app/actions/drafts";
+import { approveDraft, deleteDraft, markSent, rejectDraft } from "@/app/actions/drafts";
 import { formatDateTime } from "@/lib/format";
 import { ActionForm, ConfirmButton, CopyButton, SubmitButton } from "./forms";
 import { Badge, Card, Input, Textarea } from "./ui";
@@ -59,7 +59,7 @@ export function DraftCard({ d, showContact = true }: { d: DraftWithRefs; showCon
           <Textarea name="body" defaultValue={d.body} rows={Math.min(16, Math.max(5, d.body.split("\n").length + 1))} aria-label="Message" />
           <div className="flex flex-wrap gap-2">
             <SubmitButton>Approve</SubmitButton>
-            <SubmitButton variant="secondary" formAction={saveEditsVoid}>
+            <SubmitButton variant="secondary" name="intent" value="save">
               Save edits
             </SubmitButton>
             <CopyButton text={full} />
@@ -97,9 +97,4 @@ export function DraftCard({ d, showContact = true }: { d: DraftWithRefs; showCon
       )}
     </Card>
   );
-}
-
-async function saveEditsVoid(fd: FormData) {
-  "use server";
-  await saveDraftEdits(undefined, fd);
 }
